@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Task Island</title>
+<style>
+  :root {
+    --bg: #0b0b0c; --fg: #f4f4f5; --dim: #8b8b92; --line: #222226;
+    --accent: #d97757; --ok: #34c759; --warn: #ff9f0a; --bad: #ff453a; --info: #0a84ff;
+    --spring: cubic-bezier(.2, .9, .25, 1.15);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: transparent; overflow: hidden; height: 100%; user-select: none;
+    font: 13px/1.3 "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; color: var(--fg); }
+  body.demo { background: radial-gradient(circle at 30% 20%, #3a4a6b, #141824 70%); }
+  #hint { display: none; position: fixed; bottom: 12px; width: 100%; text-align: center; color: #ffffff88; font-size: 12px; }
+  body.demo #hint { display: block; }
+
+  #stage { display: flex; justify-content: center; padding-top: 4px; }
+  #island {
+    background: var(--bg); border-radius: 22px; overflow: hidden; width: 300px; height: 38px;
+    box-shadow: 0 8px 30px #0008, inset 0 0 0 1px #ffffff10;
+    transition: width .45s var(--spring), height .45s var(--spring), border-radius .45s var(--spring),
+                transform .35s var(--spring), opacity .25s ease, box-shadow .3s;
+  }
+  #island.hidden   { transform: translateY(-60px) scale(.6); opacity: 0; }
+  #island.expanded { width: 430px; border-radius: 26px; }
+  #island.ask      { width: 460px; height: 146px; border-radius: 26px;
+                     box-shadow: 0 8px 30px #0008, 0 0 0 1.5px var(--warn), 0 0 24px #ff9f0a55; }
+  #island.toast    { width: 390px; height: 56px; border-radius: 28px; }
+  #island.done     { box-shadow: 0 8px 30px #0008, 0 0 0 1.5px #34c75988; }
+  #island.fail     { box-shadow: 0 8px 30px #0008, 0 0 0 1.5px #ff453a99; }
+
+  .row { display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 14px 0 10px; }
+  #island.toast .row { height: 56px; padding-left: 12px; }
+
+  /* status orb */
+  .orb { width: 20px; height: 20px; border-radius: 50%; flex: none; position: relative; display: grid; place-items: center;
+    font-size: 12px; font-weight: 800; color: #000; }
+  .orb.spin { background: conic-gradient(var(--c, var(--accent)) 0 25%, #ffffff18 25% 100%); animation: spin 1s linear infinite; }
+  .orb.spin::after { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: var(--bg); }
+  .orb.wait { background: var(--accent); animation: pulse 1.4s ease-in-out infinite; }
+  .orb.ok   { background: var(--ok); }
+  .orb.bad  { background: var(--bad); }
+  .orb.warn { background: var(--warn); }
+  .orb.app  { width: 32px; height: 32px; border-radius: 10px; color: #fff; font-size: 15px; font-weight: 700; }
+
+  .label { flex: 1; min-width: 0; }
+  .l1, .l2 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .l1 b { font-weight: 600; }
+  .l1 span, .l2 { color: var(--dim); }
+  .l2 { font-size: 12px; display: none; }
+  #island.toast .l2 { display: block; }
+  .right { color: var(--dim); font-variant-numeric: tabular-nums; font-size: 12px; display: flex; gap: 6px; align-items: center; }
+  .badge { background: #2a2a2e; color: var(--fg); border-radius: 9px; padding: 0 7px; font-size: 11px; line-height: 18px; }
+
+  /* expanded list */
+  .list { padding: 0 16px 8px; opacity: 0; transition: opacity .2s; }
+  #island.expanded .list { opacity: 1; transition-delay: .12s; }
+  #island.ask .list, #island.toast .list { display: none; }
+  .item { display: flex; gap: 8px; align-items: center; height: 22px; font-size: 12px; color: var(--dim); }
+  .item .src { width: 34px; flex: none; font-family: Consolas, monospace; font-size: 10px; text-align: center;
+    border-radius: 5px; background: #1c1c20; color: var(--accent); line-height: 16px; }
+  .item .src.pwsh { color: #5aa9ff; } .item .src.cmd { color: #c8c8c8; } .item .src.isl { color: #b38cff; }
+  .item .txt { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item .txt b { color: var(--fg); font-weight: 500; }
+  .item .t { font-variant-numeric: tabular-nums; }
+  .item .ok { color: var(--ok); }
+
+  /* ask panel */
+  .askp { display: none; padding: 0 14px 12px; }
+  #island.ask .askp { display: block; animation: fadein .25s .1s both; }
+  .cmd { font-family: "Cascadia Code", Consolas, monospace; font-size: 12px; background: #1a1a1d;
+    border: 1px solid var(--line); border-radius: 10px; padding: 7px 10px; margin-bottom: 9px; height: 46px;
+    overflow: hidden; word-break: break-all; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .btns { display: flex; gap: 8px; }
+  .btns button { flex: 1; height: 30px; border: 0; border-radius: 15px; font: inherit; font-weight: 600;
+    cursor: pointer; transition: transform .1s, filter .15s; }
+  .btns button:hover { filter: brightness(1.15); }
+  .btns button:active { transform: scale(.96); }
+  #noBtn  { background: #2a2a2e; color: var(--fg); }
+  #yesBtn { background: var(--ok); color: #000; }
+  #alwaysBtn { background: #1d3a26; color: var(--ok); }
+  .x { cursor: pointer; color: var(--dim); font-size: 13px; padding: 2px 4px; border-radius: 6px; }
+  .x:hover { color: var(--fg); background: #2a2a2e; }
+
+  @keyframes spin   { to { transform: rotate(360deg); } }
+  @keyframes pulse  { 50% { opacity: .35; } }
+  @keyframes fadein { from { opacity: 0; transform: translateY(-4px); } }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="island" class="hidden">
+    <div class="row">
+      <div class="orb" id="orb"></div>
+      <div class="label"><div class="l1" id="l1"></div><div class="l2" id="l2"></div></div>
+      <div class="right" id="right"></div>
+    </div>
+    <div class="list" id="list"></div>
+    <div class="askp">
+      <div class="cmd" id="askDetail"></div>
+      <div class="btns"><button id="noBtn">No</button><button id="yesBtn">Yes</button><button id="alwaysBtn"></button></div>
+    </div>
+  </div>
+</div>
+<div id="hint">Demo mode · hover the island to expand · run it with Electron for the real thing</div>
+
+<script>
+const SRC_LABEL = { claude: 'AI', pwsh: 'PS', cmd: 'CMD', isl: 'ISL' };
+const SRC_COLOR = { claude: '#d97757', pwsh: '#5aa9ff', cmd: '#c8c8c8', isl: '#b38cff' };
+
+const S = {
+  cfg: { showAfterMs: 3000, toastMs: 6000, bannerMs: 5000, ignoreCommands: [] },
+  tasks: new Map(),   // id -> {id, source, title, sub, step, steps, startedAt, status}
+  asks: [],           // Yes/No questions (Claude permissions, isl -w prompts)
+  toasts: [],         // mirrored Windows notifications
+  banners: [],        // "finished" / "failed" results
+  focus: false, hover: false,
+};
+
+const $ = id => document.getElementById(id);
+const island = $('island');
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const fmt = ms => { const s = Math.max(0, Math.floor(ms / 1000)); return s >= 3600
+  ? `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
+  : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+const hue = s => [...String(s)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
+const baseName = p => String(p || '').split(/[\\/]/).filter(Boolean).pop() || '';
+
+function visibleTasks() {
+  const now = Date.now();
+  return [...S.tasks.values()]
+    .filter(t => t.source === 'claude' || now - t.startedAt >= S.cfg.showAfterMs)
+    .sort((a, b) => b.startedAt - a.startedAt);
+}
+
+// ---------- render: pick the most important thing to show ----------
+function render() {
+  const now = Date.now();
+  S.toasts = S.toasts.filter(t => !t.until || t.until > now);
+  S.banners = S.banners.filter(b => b.until > now);
+  if (S.toasts[0] && !S.toasts[0].until) S.toasts[0].until = now + S.cfg.toastMs;
+
+  const ask = S.asks[0], toast = S.toasts[0];
+  const banner = !S.focus && S.banners[0];
+  const tasks = S.focus ? [] : visibleTasks();
+  const orb = $('orb'), l1 = $('l1'), l2 = $('l2'), right = $('right');
+  let mode = 'hidden';
+  orb.className = 'orb'; orb.textContent = ''; orb.style.cssText = '';
+
+  if (ask) {
+    mode = 'ask';
+    orb.classList.add('warn'); orb.textContent = '!';
+    const more = S.asks.length > 1 ? `<span class="badge">+${S.asks.length - 1}</span>` : '';
+    l1.innerHTML = `<b>${esc(ask.title || 'Answer needed')}</b> <span>· ${esc(ask.project || SRC_LABEL[ask.source] || '')}</span>`;
+    right.innerHTML = `${more}<span class="x" id="xBtn" title="Dismiss (answer in the terminal instead)">✕</span>`;
+    $('askDetail').textContent = ask.detail || '';
+    $('alwaysBtn').style.display = ask.always ? '' : 'none';
+    $('alwaysBtn').textContent = ask.always || '';
+    $('yesBtn').textContent = ask.yes || 'Yes';
+    $('noBtn').textContent = ask.no || 'No';
+  } else if (toast) {
+    mode = 'toast';
+    orb.classList.add('app'); orb.textContent = (toast.app || '?')[0].toUpperCase();
+    orb.style.background = `hsl(${hue(toast.app)} 55% 42%)`;
+    l1.innerHTML = `<b>${esc(toast.title)}</b> <span>· ${esc(toast.app)}</span>`;
+    l2.textContent = toast.body || '';
+    right.innerHTML = S.toasts.length > 1 ? `<span class="badge">+${S.toasts.length - 1}</span>` : '';
+  } else if (banner) {
+    mode = banner.ok ? 'done' : 'fail';
+    orb.classList.add(banner.ok ? 'ok' : 'bad'); orb.textContent = banner.ok ? '✓' : '✕';
+    l1.innerHTML = `<b>${banner.ok ? 'Finished' : `Failed (exit ${esc(banner.exitCode)})`}</b> <span>· ${esc(banner.title)}</span>`;
+    right.textContent = fmt(banner.duration);
+  } else if (tasks.length) {
+    const t = tasks[0];
+    mode = 'compact';
+    if (t.status === 'waiting') orb.classList.add('wait');
+    else { orb.classList.add('spin'); orb.style.setProperty('--c', SRC_COLOR[t.source] || 'var(--accent)'); }
+    const head = t.source === 'claude' ? (t.step || 'Thinking…') : t.title;
+    const sub = t.source === 'claude' ? t.sub : (t.step || t.sub);
+    l1.innerHTML = `<b>${esc(head)}</b>${sub ? ` <span>· ${esc(sub)}</span>` : ''}`;
+    right.innerHTML = `${tasks.length > 1 ? `<span class="badge">+${tasks.length - 1}</span>` : ''}${fmt(now - t.startedAt)}`;
+  }
+
+  // expanded list on hover: all running tasks, or a single Claude task's recent steps
+  let rows = [];
+  if (mode === 'compact' && S.hover) {
+    if (tasks.length === 1 && tasks[0].source === 'claude') {
+      rows = tasks[0].steps.slice(-5).map(s => `<div class="item"><span class="src">${esc(s.tool.slice(0, 4))}</span>
+        <span class="txt">${esc(s.detail || s.tool)}</span><span class="${s.done ? 'ok' : ''}">${s.done ? '✓' : '•'}</span></div>`);
+    } else {
+      rows = tasks.slice(0, 5).map(t => `<div class="item"><span class="src ${t.source}">${SRC_LABEL[t.source] || '?'}</span>
+        <span class="txt"><b>${esc(t.source === 'claude' ? 'Claude' : t.title)}</b> · ${esc(t.step || t.sub || '')}</span>
+        <span class="t">${fmt(now - t.startedAt)}</span></div>`);
+    }
+  }
+  $('list').innerHTML = rows.join('');
+
+  island.className = mode === 'compact' ? (rows.length ? 'expanded' : '') : mode;
+  island.style.height = rows.length ? `${46 + 22 * rows.length}px` : '';
+}
+setInterval(render, 500);
+
+// ---------- inputs ----------
+function endTask(id, ok, exitCode) {
+  const t = S.tasks.get(id);
+  if (!t) return;
+  S.tasks.delete(id);
+  const duration = Date.now() - t.startedAt;
+  if (t.source === 'claude' || duration >= S.cfg.showAfterMs)
+    S.banners.unshift({ title: t.source === 'claude' ? `Claude · ${t.sub}` : t.title, ok, exitCode, duration,
+                        until: Date.now() + S.cfg.bannerMs });
+}
+
+function onTask(m) {           // PowerShell profile, CMD/Clink, isl wrapper
+  if (m.phase === 'start') {
+    const first = String(m.command || '').trim().split(/\s+/)[0].toLowerCase().replace(/\.(exe|cmd|bat)$/, '');
+    if (S.cfg.ignoreCommands.includes(first)) return;
+    S.tasks.set(m.id, { id: m.id, source: m.source, title: m.command, sub: baseName(m.cwd), step: '',
+                        steps: [], startedAt: Date.now(), status: 'running' });
+  } else if (m.phase === 'output') {
+    const t = S.tasks.get(m.id); if (t) t.step = m.line;
+  } else if (m.phase === 'end') {
+    endTask(m.id, !!m.ok, m.exitCode);
+  }
+  render();
+}
+
+function onClaude(e) {         // Claude Code hooks
+  const id = 'claude:' + (e.session || 'default');
+  // Claude moved on (you answered in the terminal): drop that session's pending question
+  if (e.event !== 'Notification') {
+    const stale = S.asks.filter(q => q.source === 'claude' && q.session === e.session && Date.now() - q.at > 1500);
+    stale.forEach(q => api.answer(q.id, 'dismiss'));
+    S.asks = S.asks.filter(q => !stale.includes(q));
+  }
+  const get = () => {
+    if (!S.tasks.has(id)) S.tasks.set(id, { id, source: 'claude', title: 'Claude', sub: e.project, step: 'Thinking…',
+                                            steps: [], startedAt: Date.now(), status: 'running' });
+    return S.tasks.get(id);
+  };
+  switch (e.event) {
+    case 'UserPromptSubmit': S.tasks.delete(id); get(); break;
+    case 'PreToolUse': { const t = get(); t.status = 'running';
+      t.step = e.detail ? `${e.tool}: ${e.detail}` : e.tool; t.steps.push({ tool: e.tool, detail: e.detail }); break; }
+    case 'PostToolUse': { const t = get(); const s = [...t.steps].reverse().find(x => !x.done && x.tool === e.tool);
+      if (s) s.done = true; t.step = 'Thinking…'; break; }
+    case 'Notification':
+      if (/permission/i.test(e.message || '')) break;   // the PermissionRequest ask covers this
+      if (S.tasks.has(id)) { const t = get(); t.status = 'waiting'; t.step = e.message || 'Waiting for your input'; }
+      break;
+    case 'Stop': endTask(id, true, 0); break;
+    case 'SessionEnd': S.tasks.delete(id); break;
+  }
+  render();
+}
+
+function answer(a) {
+  const q = S.asks.shift();
+  if (q) api.answer(q.id, a);
+  render();
+}
+$('yesBtn').onclick = () => answer('yes');
+$('noBtn').onclick = () => answer('no');
+$('alwaysBtn').onclick = () => answer('always');
+island.addEventListener('mouseenter', () => { S.hover = true;  api.setClickable(true);  render(); });
+island.addEventListener('mouseleave', () => { S.hover = false; api.setClickable(false); render(); });
+island.addEventListener('click', e => {
+  if (e.target.id === 'xBtn') return answer('dismiss');               // ✕ on a question
+  if (!S.asks.length && S.toasts[0]) { S.toasts.shift(); render(); }  // click a toast to dismiss
+});
+
+// ---------- wiring: Electron bridge, or demo mode in a normal browser ----------
+let api = window.taskIsland;
+if (api) {
+  api.on('config', c => { S.cfg = { ...S.cfg, ...c }; render(); });
+  api.on('task', onTask);
+  api.on('claude', onClaude);
+  api.on('ask', q => { S.asks.push({ ...q, at: Date.now() }); render(); });
+  api.on('ask-cancel', ({ id }) => { S.asks = S.asks.filter(q => q.id !== id); render(); });
+  api.on('notification', n => { S.toasts.push(n); render(); });
+  api.on('terminal-focus', f => { S.focus = f; render(); });
+} else {
+  document.body.classList.add('demo');
+  let resume;
+  api = { setClickable() {}, answer() { setTimeout(resume, 500); } };
+  S.cfg.showAfterMs = 800;
+  const script = [
+    [300,  'task', { phase: 'start', id: 'p1', source: 'pwsh', command: 'npm run build', cwd: 'C:\\dev\\portfolio' }],
+    [1800, 'task', { phase: 'output', id: 'p1', line: 'vite v5.4 building for production… 412 modules' }],
+    [1200, 'claude', { event: 'UserPromptSubmit', session: 's', project: 'tinytune' }],
+    [600,  'claude', { event: 'PreToolUse', session: 's', tool: 'Read', detail: 'train.py' }],
+    [700,  'task', { phase: 'start', id: 'c1', source: 'cmd', command: 'pip install -r requirements.txt', cwd: 'C:\\dev\\fleetsense' }],
+    [1400, 'notification', { app: 'Outlook', title: 'Interview invite: Rokt', body: 'Thursday 2:00 PM · Google Meet' }],
+    [1800, 'claude', { event: 'PostToolUse', session: 's', tool: 'Read' }],
+    [600,  'ask', { source: 'claude', project: 'tinytune', title: 'Allow Glob?', detail: '**/*  in  C:\\Users\\Admin\\career-ops', yes: 'Allow once', no: 'Deny', always: 'Always allow' }],
+    [0,    'claude', { event: 'PreToolUse', session: 's', tool: 'Bash', detail: 'python train.py --epochs 3' }],
+    [1500, 'task', { phase: 'end', id: 'p1', ok: true, exitCode: 0 }],
+    [3500, 'ask', { source: 'isl', project: 'winget upgrade --all', title: 'Answer needed', detail: 'Do you agree to all the source agreements terms? [Y] Yes  [N] No' }],
+    [600,  'task', { phase: 'end', id: 'c1', ok: false, exitCode: 1 }],
+    [4000, 'claude', { event: 'Stop', session: 's' }],
+    [7000, 'loop'],
+  ];
+  const handlers = { task: onTask, claude: onClaude, notification: n => { S.toasts.push(n); render(); } };
+  let i = 0;
+  const next = () => {
+    const [delay, kind, data] = script[i++ % script.length];
+    setTimeout(() => {
+      if (kind === 'loop') return next();
+      if (kind === 'ask') { S.asks.push({ id: 'demo', ...data }); render(); resume = next; return; }
+      handlers[kind](data); next();
+    }, delay);
+  };
+  next();
+}
+render();
+</script>
+</body>
+</html>

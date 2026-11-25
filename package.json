@@ -1,0 +1,39 @@
+{
+  "name": "task-island",
+  "version": "0.3.0",
+  "description": "Dynamic-Island style bar for Windows: background terminal tasks, Claude Code, and system notifications. Runs fully offline.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "npx --yes electron-builder --win portable"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0"
+  },
+  "optionalDependencies": {
+    "get-windows": "^9.2.0"
+  },
+  "build": {
+    "appId": "dev.techdeep.taskisland",
+    "productName": "Task Island",
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "config.json",
+      "helpers/**"
+    ],
+    "extraResources": [
+      {
+        "from": "helpers",
+        "to": "helpers"
+      }
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/techdeeplimbachiya/task-island.git"
+  },
+  "license": "MIT",
+  "author": "Deep Limbachiya"
+}

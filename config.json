@@ -1,0 +1,13 @@
+{
+  "port": 47823,
+  "showAfterMs": 3000,
+  "toastMs": 6000,
+  "bannerMs": 5000,
+  "ignoreCommands": ["claude", "vim", "nvim", "nano", "ssh", "less", "more", "top", "htop", "python", "node", "pwsh", "powershell", "cmd"],
+  "terminals": ["windowsterminal", "powershell", "pwsh", "conhost", "cmd.exe", "openconsole"],
+  "notifications": {
+    "enabled": true,
+    "pollMs": 1500,
+    "ignoreApps": []
+  }
+}
